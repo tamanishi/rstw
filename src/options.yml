@@ -1,0 +1,86 @@
+name: rstw
+version: "0.1.0"
+author: Masayuki Sunahara <tamanishi@gmail.com>
+about: A Rust port of twty.
+args:
+    - account:
+        short: a
+        value_name: ACCOUNT
+        help: "switch account to load configuration file. Note: experimental"
+        takes_value: true
+    - fav_id:
+        short: f
+        value_name: ID
+        help: "specify favorite ID"
+        takes_value: true
+    - inreply_id:
+        short: i
+        value_name: ID
+        help: "specify in-reply ID, if not specify text, it will be RT."
+        takes_value: true
+    - list:
+        short: l
+        value_name: USER/LIST
+        help: "show list's timeline (ex: mattn_jp/subtech)"
+        takes_value: true
+    - user:
+        short: u
+        value_name: USER
+        help: "show user's timeline"
+        takes_value: true
+    - query:
+        short: s
+        value_name: WORD
+        help: "search timeline"
+        takes_value: true
+    - asjson:
+        short: j
+        help: "as JSON"
+        takes_value: false
+    - stream:
+        short: S
+        help: "stream timeline"
+        takes_value: false
+    - reply:
+        short: r
+        help: "show replies"
+        takes_value: false
+    - from_file:
+        short: F
+        value_name: FILENAME
+        help: "post utf-8 string from a file(\"-\" means STDIN)"
+        takes_value: true
+    - count:
+        short: c
+        value_name: NUMBER
+        help: "show NUMBER tweets at timeline."
+        takes_value: true
+    - since:
+        long: since
+        value_name: DATE
+        help: "show tweets created after the DATE (ex. 2017-05-01)"
+        takes_value: true
+    - until:
+        long: until
+        value_name: DATE
+        help: "show tweets created before the DATE (ex. 2017-05-31)"
+        takes_value: true
+    - since_id:
+        long: since_id
+        value_name: NUMBER
+        help: "show tweets that have ids greater than NUMBER."
+        takes_value: true
+    - max_id:
+        long: max_id
+        value_name: NUMBER
+        help: "show tweets that have ids lower than NUMBER."
+        takes_value: true
+    - verbose:
+        short: v
+        help: "show detail"
+        takes_value: false
+    - debug:
+        short: d
+        help: "show raw json"
+        takes_value: false
+
