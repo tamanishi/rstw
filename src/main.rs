@@ -1,4 +1,3 @@
-#![warn(bad_style)]
 #![warn(unused)]
 #![warn(unused_extern_crates)]
 #![warn(unused_imports)]
@@ -15,16 +14,13 @@ extern crate twitter_api as twitter;
 extern crate lazy_static;
 extern crate colored;
 extern crate time;
-#[macro_use]
-extern crate hyper;
-extern crate hyper_tls;
 extern crate tokio_core;
 extern crate futures;
+extern crate twitter_stream;
 
 use clap::{App, AppSettings};
 use colored::*;
-use hyper::{Client, Method, Request};
-use hyper_tls::HttpsConnector;
+use futures::{Future, Stream};
 use oauth::Token;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -39,11 +35,10 @@ use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
 use std::sync::RwLock;
-use std::time::Duration;
-use std::thread;
 use time::*;
 use tokio_core::reactor::Core;
-use futures::{Async, Future, Stream};
+use twitter_stream::Token as TsToken;
+use twitter_stream::TwitterStream;
 
 // Account hold information about account
 #[allow(dead_code)]
@@ -330,6 +325,33 @@ macro_rules! CONFR {
 macro_rules! CONFW {
     ($name: ident) => { CONF.write().unwrap().$name }
 }
+
+const TIME_FMT: &str = "%a %b %e %T %z %Y";
+
+fn to_local_time(value: &str) -> String {
+    match strptime(&value, TIME_FMT) {
+        Ok(tm) => {
+            match strftime(TIME_FMT, &tm.to_local()) {
+                Ok(value) => value,
+                Err(err) => {
+                    println!(
+                        "failed to generate time string. reason: {}",
+                        Error::description(&err)
+                    );
+                    value.to_owned()
+                }
+            }
+        }
+        Err(err) => {
+            println!(
+                "failed to parse time string. reason: {}",
+                Error::description(&err)
+            );
+            value.to_owned()
+        }
+    }
+}
+
 fn show_tweets(tweets: &Vec<Tweet>, verbose: bool) {
     if ARGSR!(asjson) {
         for tweet in tweets.iter().rev() {
@@ -350,7 +372,8 @@ fn show_tweets(tweets: &Vec<Tweet>, verbose: bool) {
                 )
             );
             println!("  {}", tweet.id_str);
-            println!("  {}", tweet.created_at);
+            println!("  {}", to_local_time(&tweet.created_at));
+            // println!("  {}", tweet.created_at);
             println!();
         }
     } else {
@@ -362,18 +385,16 @@ fn show_tweets(tweets: &Vec<Tweet>, verbose: bool) {
 
 fn get_access_token() -> bool {
 
-    let needs_auth = CONFR!(credential)["AccessToken"].is_null();
-
-    if needs_auth {
-        let client_token = CONFR!(credential)["ClientToken"]
+    if CONFR!(credential)["access_key"].is_null() {
+        let consumer_key = CONFR!(credential)["consumer_key"]
             .as_str()
             .unwrap()
             .to_string();
-        let client_secret = CONFR!(credential)["ClientSecret"]
+        let consumer_secret = CONFR!(credential)["consumer_secret"]
             .as_str()
             .unwrap()
             .to_string();
-        let consumer = Token::new(client_token, client_secret);
+        let consumer = Token::new(consumer_key, consumer_secret);
         let request = twitter::get_request_token(&consumer).unwrap();
 
         let url = twitter::get_authorize_url(&request);
@@ -402,8 +423,8 @@ fn get_access_token() -> bool {
         io::stdin().read_line(&mut pin).unwrap();
 
         let access: Token = twitter::get_access_token(&consumer, &request, &pin).unwrap();
-        CONFW!(credential)["AccessToken"] = json!(access.key);
-        CONFW!(credential)["AccessSecret"] = json!(access.secret);
+        CONFW!(credential)["access_key"] = json!(access.key);
+        CONFW!(credential)["access_secret"] = json!(access.secret);
         true
     } else {
         false
@@ -489,8 +510,9 @@ fn read_config() {
         }
         Err(err) => {
             if err.kind() == ErrorKind::NotFound {
-                credential["ClientToken"] = json!("m0OyCuNE7CkQ3aY7SE5vd8r6F");
-                credential["ClientSecret"] = json!("B2ymwBiqQsYGIWJ9Etq09piBfptMf8ajZVoRL6DVmFtNeMqjq2");
+                credential["consumer_key"] = json!("m0OyCuNE7CkQ3aY7SE5vd8r6F");
+                credential["consumer_secret"] =
+                    json!("B2ymwBiqQsYGIWJ9Etq09piBfptMf8ajZVoRL6DVmFtNeMqjq2");
             } else {
                 panic!(
                     "failed to open config file. reason: {}",
@@ -535,7 +557,6 @@ fn read_file(file_path: &str) -> String {
 }
 
 fn save_credential() {
-    println!("{}", CONFR!(file));
     let mut file = match File::create(&CONFR!(file)) {
         Ok(file) => file,
         Err(err) => {
@@ -558,9 +579,8 @@ fn save_credential() {
 }
 
 fn count_to_param<'a>(param: &mut HashMap<Cow<'a, str>, Cow<'a, str>>) {
-    let count = ARGSR!(count).clone();
     if let Ok(_) = ARGSR!(count).parse::<i64>() {
-        param.insert("count".into(), count.into());
+        param.insert("count".into(), ARGSR!(count).clone().into());
     }
 }
 
@@ -572,10 +592,13 @@ fn until_to_param<'a>(param: &mut HashMap<Cow<'a, str>, Cow<'a, str>>) {
     timeformat_to_param(param, "until", &ARGSR!(until));
 }
 
-fn timeformat_to_param<'a>(param: &mut HashMap<Cow<'a, str>, Cow<'a, str>>, name: &str, value: &str) {
+fn timeformat_to_param<'a>(
+    param: &mut HashMap<Cow<'a, str>, Cow<'a, str>>,
+    name: &str,
+    value: &str,
+) {
     if let Ok(_) = strptime(&value, "%Y-%m-%d") {
         param.insert(name.to_string().into(), value.to_string().into());
-        println!("{:?}", param);
     }
 }
 
@@ -681,27 +704,27 @@ fn main() {
         save_credential();
     }
 
-    let client_token = CONFR!(credential)["ClientToken"]
+    let consumer_key = CONFR!(credential)["consumer_key"]
         .as_str()
         .unwrap()
         .to_string();
-    let client_secret = CONFR!(credential)["ClientSecret"]
-        .as_str()
-        .unwrap()
-        .to_string();
-
-    let consumer: Token = Token::new(client_token, client_secret);
-
-    let access_token = CONFR!(credential)["AccessToken"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let access_secret = CONFR!(credential)["AccessSecret"]
+    let consumer_secret = CONFR!(credential)["consumer_secret"]
         .as_str()
         .unwrap()
         .to_string();
 
-    let access: Token = Token::new(access_token, access_secret);
+    let consumer: Token = Token::new(consumer_key, consumer_secret);
+
+    let access_key = CONFR!(credential)["access_key"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let access_secret = CONFR!(credential)["access_secret"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let access: Token = Token::new(access_key, access_secret);
 
     let mut param = HashMap::new();
     if ARGSR!(query).len() > 0 {
@@ -716,7 +739,8 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let res: serde_json::Value = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let res: serde_json::Value =
+                    serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
                 let val_vec: &Vec<serde_json::Value> = res["statuses"].as_array().unwrap();
                 let tweets: Vec<Tweet> = val_vec
                     .into_iter()
@@ -735,7 +759,8 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap())
+                    .unwrap();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
             Err(err) => println!("failed to get tweets: {}", err.description()),
@@ -751,7 +776,8 @@ fn main() {
                 None,
             ) {
                 Ok(bytes) => {
-                    let res: serde_json::Value = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                    let res: serde_json::Value =
+                        serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
                     param.insert(
                         "owner_screen_name".into(),
                         res["screen_name"].as_str().unwrap().to_string().into(),
@@ -779,7 +805,8 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap())
+                    .unwrap();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
             Err(err) => println!("failed to get tweets: {}", err.description()),
@@ -796,7 +823,8 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap())
+                    .unwrap();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
             Err(err) => println!("failed to get tweets: {}", err.description()),
@@ -816,44 +844,22 @@ fn main() {
             Err(err) => println!("failed to create favorite: {}", err.description()),
         }
     } else if ARGSR!(stream) {
-        // TODO: does not work.
-/*
-        let url = "https://userstream.twitter.com/1.1/user.json";
-        let sign: (String, String) = oauth::authorization_header("GET", url, &consumer, Some(&access), None);
-        // println!("header: {:?}", sign.0);
+        let token: TsToken = serde_json::from_str(&CONFR!(credential).to_string()).unwrap();
+
         let mut core = Core::new().unwrap();
-        let client = Client::configure()
-            .connector(HttpsConnector::new(4, &core.handle()).unwrap())
-            .build(&core.handle());
-        header!{(Authorization, "Authorization") => [String]};
-        let mut req: Request = Request::new(Method::Get, url.parse().unwrap());
-        req.headers_mut().set(Authorization(sign.0));
-        let work = client.request(req).and_then(|res| {
-            println!("res.satus() {}", res.status());
-            println!("res.headers() {:?}", res.headers());
-            let mut body = res.body();
-            loop {
-                match body.poll() {
-                    Ok(Async::Ready(chunk)) => {
-                        let vec = chunk.unwrap().to_vec();
-                        let str = String::from_utf8(vec).unwrap();
-                        println!("chunk: {:?}", str);
-                    },
-                    Ok(Async::NotReady) => {
-                        // println!("NotReady");
-                        // thread::sleep(Duration::from_millis(2000));
-                    },
-                    Err(err) => {
-                        println!("Error: {}", Error::description(&err));
-                    }
-                };
-            }
 
-            Ok(Async::Ready(()))
-        });
+        let future = TwitterStream::user(&token, &core.handle())
+            .flatten_stream()
+            .for_each(|json| {
+                let val: serde_json::Value = serde_json::from_str(&json.as_str()).unwrap();
+                if !val["id_str"].is_null() {
+                    let tweet: Tweet = serde_json::from_str(&json.as_str()).unwrap();
+                    show_tweets(&vec![tweet], ARGSR!(verbose));
+                }
+                Ok(())
+            });
 
-        core.run(work).unwrap();
-*/
+        core.run(future).unwrap();
     } else if ARGSR!(from_file).len() > 0 {
         let text = read_file(&ARGSR!(from_file));
         param.insert("status".into(), text.into());
@@ -868,7 +874,8 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap())
+                    .unwrap();
                 println!("tweeted: {}", tweet.id_str);
             }
             Err(err) => println!("failed to post tweet: {}", Error::description(&err)),
@@ -882,7 +889,8 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap())
+                    .unwrap();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
             Err(err) => println!("failed to get tweet: {}", err.description()),
@@ -914,7 +922,8 @@ fn main() {
                     Some(&param),
                 ) {
                     Ok(bytes) => {
-                        let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                        let tweets: Vec<Tweet> =
+                            serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
                         show_tweets(&tweets, ARGSR!(verbose));
                     }
                     Err(err) => println!("failed to get tweet: {}", err.description()),
@@ -930,7 +939,8 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap())
+                    .unwrap();
                 println!("tweeted: {}", tweet.id_str);
             }
             Err(err) => println!("failed to post tweet: {}", Error::description(&err)),

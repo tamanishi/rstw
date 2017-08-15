@@ -17,4 +17,4 @@ hyper = "0.11.2"
 tokio-core = "0.1.9"
 futures = "0.1.14"
 hyper-tls = "0.1.2"
-
+twitter-stream = "0.5.3"
