@@ -5,7 +5,6 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 extern crate oauth_client as oauth;
-extern crate twitter_api as twitter;
 #[macro_use]
 extern crate lazy_static;
 extern crate colored;
@@ -375,7 +374,75 @@ fn show_tweets(tweets: &Vec<Tweet>, verbose: bool) {
     }
 }
 
-fn get_access_token() -> bool {
+fn split_query<'a>(query: &'a str) -> HashMap<Cow<'a, str>, Cow<'a, str>> {
+    let mut param = HashMap::new();
+    for q in query.split('&') {
+        let mut s = q.splitn(2, '=');
+        let k = s.next().unwrap();
+        let v = s.next().unwrap();
+        let _ = param.insert(k.into(), v.into());
+    }
+    param
+}
+
+fn get_request_token(consumer: &Token) -> Token<'static> {
+    let (header, _) = oauth::authorization_header(
+        "GET",
+        "https://api.twitter.com/oauth/request_token",
+        consumer,
+        None,
+        None,
+    );
+    let client = reqwest::Client::new().unwrap();
+    let mut headers = Headers::new();
+    headers.set(Authorization(header));
+    let mut response = client
+        .get("https://api.twitter.com/oauth/request_token")
+        .unwrap()
+        .headers(headers)
+        .send()
+        .unwrap();
+    let mut resp = String::new();
+    let _ = response.read_to_string(&mut resp).unwrap();
+    let param = split_query(resp.as_ref());
+    Token::new(
+        param.get("oauth_token").unwrap().to_string(),
+        param.get("oauth_token_secret").unwrap().to_string(),
+    )
+}
+
+fn get_access_token(consumer: &Token, request: &Token, pin: &str) -> Token<'static> {
+    let mut params = HashMap::new();
+    params.insert("oauth_verifier".into(), pin.into());
+    let (header, body) = oauth::authorization_header(
+        "GET",
+        "https://api.twitter.com/oauth/access_token",
+        consumer,
+        Some(request),
+        Some(&params),
+    );
+    let client = reqwest::Client::new().unwrap();
+    let mut headers = Headers::new();
+    headers.set(Authorization(header));
+    let mut res = client
+        .get(&format!(
+            "https://api.twitter.com/oauth/access_token?{}",
+            body
+        ))
+        .unwrap()
+        .headers(headers)
+        .send()
+        .unwrap();
+    let mut resp = String::new();
+    let _ = res.read_to_string(&mut resp).unwrap();
+    let param = split_query(resp.as_ref());
+    Token::new(
+        param.get("oauth_token").unwrap().to_string(),
+        param.get("oauth_token_secret").unwrap().to_string(),
+    )
+}
+
+fn get_token() -> bool {
 
     if CONFR!(credential)["access_key"].is_null() {
         let consumer_key = CONFR!(credential)["consumer_key"]
@@ -387,9 +454,12 @@ fn get_access_token() -> bool {
             .unwrap()
             .to_string();
         let consumer = Token::new(consumer_key, consumer_secret);
-        let request = twitter::get_request_token(&consumer).unwrap();
+        let request = get_request_token(&consumer);
 
-        let url = twitter::get_authorize_url(&request);
+        let url = format!(
+            "https://api.twitter.com/oauth/authorize?oauth_token={}",
+            request.key
+        );
 
         let browser: String;
         let args: Vec<String>;
@@ -414,7 +484,7 @@ fn get_access_token() -> bool {
         let mut pin = String::new();
         io::stdin().read_line(&mut pin).unwrap();
 
-        let access: Token = twitter::get_access_token(&consumer, &request, &pin).unwrap();
+        let access: Token = get_access_token(&consumer, &request, &pin);
         CONFW!(credential)["access_key"] = json!(access.key);
         CONFW!(credential)["access_secret"] = json!(access.secret);
         true
@@ -690,7 +760,7 @@ fn main() {
 
     read_config();
 
-    let authed: bool = get_access_token();
+    let authed: bool = get_token();
 
     if authed == true {
         save_credential();
