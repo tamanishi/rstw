@@ -1,7 +1,3 @@
-#![warn(unused)]
-#![warn(unused_extern_crates)]
-#![warn(unused_imports)]
-
 #[macro_use]
 extern crate clap;
 #[macro_use]
@@ -14,14 +10,12 @@ extern crate twitter_api as twitter;
 extern crate lazy_static;
 extern crate colored;
 extern crate time;
-extern crate tokio_core;
-extern crate futures;
-extern crate twitter_stream;
+extern crate reqwest;
 
 use clap::{App, AppSettings};
 use colored::*;
-use futures::{Future, Stream};
 use oauth::Token;
+use reqwest::header::{Authorization, Headers};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
@@ -29,16 +23,14 @@ use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::io;
-use std::io::ErrorKind;
+use std::io::{BufReader, ErrorKind};
 use std::io::prelude::*;
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
 use std::sync::RwLock;
+use std::thread;
 use time::*;
-use tokio_core::reactor::Core;
-use twitter_stream::Token as TsToken;
-use twitter_stream::TwitterStream;
 
 // Account hold information about account
 #[allow(dead_code)]
@@ -844,22 +836,37 @@ fn main() {
             Err(err) => println!("failed to create favorite: {}", err.description()),
         }
     } else if ARGSR!(stream) {
-        let token: TsToken = serde_json::from_str(&CONFR!(credential).to_string()).unwrap();
-
-        let mut core = Core::new().unwrap();
-
-        let future = TwitterStream::user(&token, &core.handle())
-            .flatten_stream()
-            .for_each(|json| {
-                let val: serde_json::Value = serde_json::from_str(&json.as_str()).unwrap();
+        let client = reqwest::Client::new().unwrap();
+        let mut headers = Headers::new();
+        let (header, _) = oauth::authorization_header(
+            "GET",
+            "https://userstream.twitter.com/1.1/user.json",
+            &consumer,
+            Some(&access),
+            None,
+        );
+        headers.set(Authorization(header));
+        let res = client
+            .get("https://userstream.twitter.com/1.1/user.json")
+            .unwrap()
+            .headers(headers)
+            .send()
+            .unwrap();
+        let receive_loop = thread::spawn(move || {
+            let buf = BufReader::new(res);
+            for line in buf.lines() {
+                let line_str = line.unwrap();
+                let val: serde_json::Value = match serde_json::from_str(&line_str) {
+                    Ok(val) => val,
+                    Err(_) => continue,
+                };
                 if !val["id_str"].is_null() {
-                    let tweet: Tweet = serde_json::from_str(&json.as_str()).unwrap();
+                    let tweet: Tweet = serde_json::from_str(&line_str).unwrap();
                     show_tweets(&vec![tweet], ARGSR!(verbose));
                 }
-                Ok(())
-            });
-
-        core.run(future).unwrap();
+            }
+        });
+        let _ = receive_loop.join();
     } else if ARGSR!(from_file).len() > 0 {
         let text = read_file(&ARGSR!(from_file));
         param.insert("status".into(), text.into());
