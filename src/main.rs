@@ -686,77 +686,30 @@ fn main() {
         .usage("rstw [FLAGS] [OPTIONS] [TEXT]")
         .get_matches();
 
-    if let Some(val) = matches.value_of("account") {
-        ARGSW!(account) = String::from(val);
-    };
+    ARGSW!(account) = matches.value_of("account").unwrap().to_owned();
+    ARGSW!(fav_id) = matches.value_of("fav_id").unwrap().to_owned();
+    ARGSW!(inreply_id) = matches.value_of("inreply_id").unwrap().to_owned();
+    ARGSW!(list) = matches.value_of("list").unwrap().to_owned();
+    ARGSW!(user) = matches.value_of("user").unwrap().to_owned();
+    ARGSW!(query) = matches.value_of("query").unwrap().to_owned();
+    ARGSW!(asjson) = matches.is_present("asjson");
+    ARGSW!(stream) = matches.is_present("stream");
+    ARGSW!(reply) = matches.is_present("reply");
+    ARGSW!(from_file) = matches.value_of("from_file").unwrap().to_owned();
+    ARGSW!(count) = matches.value_of("count").unwrap().to_owned();
+    ARGSW!(since) = matches.value_of("since").unwrap().to_owned();
+    ARGSW!(until) = matches.value_of("until").unwrap().to_owned();
 
-    if let Some(val) = matches.value_of("fav_id") {
-        ARGSW!(fav_id) = String::from(val);
-    };
-
-    if let Some(val) = matches.value_of("inreply_id") {
-        ARGSW!(inreply_id) = String::from(val);
-    };
-
-    if let Some(val) = matches.value_of("list") {
-        ARGSW!(list) = String::from(val);
-    };
-
-    if let Some(val) = matches.value_of("user") {
-        ARGSW!(user) = String::from(val);
-    };
-
-    if let Some(val) = matches.value_of("query") {
-        ARGSW!(query) = String::from(val);
-    };
-
-    if matches.is_present("asjson") {
-        ARGSW!(asjson) = true;
+    if let Ok(num) = i64::from_str(matches.value_of("since_id").unwrap()) {
+        ARGSW!(since_id) = num;
     }
 
-    if matches.is_present("stream") {
-        ARGSW!(stream) = true;
+    if let Ok(num) = i64::from_str(matches.value_of("max_id").unwrap()) {
+        ARGSW!(max_id) = num;
     }
 
-    if matches.is_present("reply") {
-        ARGSW!(reply) = true;
-    }
-
-    if let Some(val) = matches.value_of("from_file") {
-        ARGSW!(from_file) = String::from(val);
-    };
-
-    if let Some(val) = matches.value_of("count") {
-        ARGSW!(count) = String::from(val);
-    };
-
-    if let Some(val) = matches.value_of("since") {
-        ARGSW!(since) = String::from(val);
-    };
-
-    if let Some(val) = matches.value_of("until") {
-        ARGSW!(until) = String::from(val);
-    };
-
-    if let Some(val) = matches.value_of("since_id") {
-        if let Ok(num) = i64::from_str(val) {
-            ARGSW!(since_id) = num;
-        }
-    };
-
-    if let Some(val) = matches.value_of("max_id") {
-        if let Ok(num) = i64::from_str(val) {
-            ARGSW!(max_id) = num;
-        }
-    };
-
-    if matches.is_present("verbose") {
-        ARGSW!(verbose) = true;
-    }
-
-    if matches.is_present("debug") {
-        ARGSW!(debug) = true;
-    }
+    ARGSW!(verbose) = matches.is_present("verbose");
+    ARGSW!(debug) = matches.is_present("debug");
 
     read_config();
 
