@@ -686,26 +686,60 @@ fn main() {
         .usage("rstw [FLAGS] [OPTIONS] [TEXT]")
         .get_matches();
 
-    ARGSW!(account) = matches.value_of("account").unwrap().to_owned();
-    ARGSW!(fav_id) = matches.value_of("fav_id").unwrap().to_owned();
-    ARGSW!(inreply_id) = matches.value_of("inreply_id").unwrap().to_owned();
-    ARGSW!(list) = matches.value_of("list").unwrap().to_owned();
-    ARGSW!(user) = matches.value_of("user").unwrap().to_owned();
-    ARGSW!(query) = matches.value_of("query").unwrap().to_owned();
+    if let Some(v) = matches.value_of("account") {
+        ARGSW!(account) = v.to_owned();
+    }
+
+    if let Some(v) = matches.value_of("fav_id") {
+        ARGSW!(fav_id) = v.to_owned();
+    }
+
+    if let Some(v) = matches.value_of("inreply_id") {
+        ARGSW!(inreply_id) = v.to_owned();
+    }
+
+    if let Some(v) = matches.value_of("list") {
+        ARGSW!(list) = v.to_owned();
+    }
+
+    if let Some(v) = matches.value_of("user") {
+        ARGSW!(user) = v.to_owned();
+    }
+
+    if let Some(v) = matches.value_of("query") {
+        ARGSW!(query) = v.to_owned();
+    }
+
     ARGSW!(asjson) = matches.is_present("asjson");
     ARGSW!(stream) = matches.is_present("stream");
     ARGSW!(reply) = matches.is_present("reply");
-    ARGSW!(from_file) = matches.value_of("from_file").unwrap().to_owned();
-    ARGSW!(count) = matches.value_of("count").unwrap().to_owned();
-    ARGSW!(since) = matches.value_of("since").unwrap().to_owned();
-    ARGSW!(until) = matches.value_of("until").unwrap().to_owned();
-
-    if let Ok(num) = i64::from_str(matches.value_of("since_id").unwrap()) {
-        ARGSW!(since_id) = num;
+=
+    if let Some(v) = matches.value_of("from_file") {
+        ARGSW!(from_file) = v.to_owned();
     }
 
-    if let Ok(num) = i64::from_str(matches.value_of("max_id").unwrap()) {
-        ARGSW!(max_id) = num;
+    if let Some(v) = matches.value_of("count") {
+        ARGSW!(count) = v.to_owned();
+    }
+
+    if let Some(v) = matches.value_of("since") {
+        ARGSW!(since) = v.to_owned();
+    }
+
+    if let Some(v) = matches.value_of("until") {
+        ARGSW!(until) = v.to_owned();
+    }
+
+    if let Some(v) = matches.value_of("since_id") {
+        if let Ok(num) = i64::from_str(v) {
+            ARGSW!(since_id) = num;
+        }
+    }
+
+    if let Some(v) = matches.value_of("max_id") {
+        if let Ok(num) = i64::from_str(v) {
+            ARGSW!(max_id) = num;
+        }
     }
 
     ARGSW!(verbose) = matches.is_present("verbose");

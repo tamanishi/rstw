@@ -1,5 +1,5 @@
 name: rstw
-version: "0.1.0"
+version: "0.1.1"
 author: Masayuki Sunahara <tamanishi@gmail.com>
 about: A Rust port of twty.
 args:
