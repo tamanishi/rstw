@@ -713,7 +713,7 @@ fn main() {
     ARGSW!(asjson) = matches.is_present("asjson");
     ARGSW!(stream) = matches.is_present("stream");
     ARGSW!(reply) = matches.is_present("reply");
-=
+
     if let Some(v) = matches.value_of("from_file") {
         ARGSW!(from_file) = v.to_owned();
     }
