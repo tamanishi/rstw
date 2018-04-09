@@ -23,6 +23,12 @@ args:
         value_name: USER/LIST
         help: "show list's timeline (ex: mattn_jp/subtech)"
         takes_value: true
+    - media:
+        short: m
+        value_name: FILE
+        help: "upload media"
+        takes_value: true
+        multiple: true
     - user:
         short: u
         value_name: USER

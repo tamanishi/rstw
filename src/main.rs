@@ -257,6 +257,7 @@ struct Args {
     fav_id: String,
     inreply_id: String,
     list: String,
+    media: String,
     user: String,
     query: String,
     asjson: bool,
@@ -279,6 +280,7 @@ impl Args {
             fav_id: "".to_owned(),
             inreply_id: "".to_owned(),
             list: "".to_owned(),
+            media: "".to_owned(),
             user: "".to_owned(),
             query: "".to_owned(),
             asjson: false,
@@ -393,12 +395,12 @@ fn get_request_token(consumer: &Token) -> Token<'static> {
         None,
         None,
     );
-    let client = reqwest::Client::new().unwrap();
+    let client = reqwest::Client::new();
     let mut headers = Headers::new();
     headers.set(Authorization(header));
     let mut response = client
         .get("https://api.twitter.com/oauth/request_token")
-        .unwrap()
+        // .unwrap()
         .headers(headers)
         .send()
         .unwrap();
@@ -421,7 +423,7 @@ fn get_access_token(consumer: &Token, request: &Token, pin: &str) -> Token<'stat
         Some(request),
         Some(&params),
     );
-    let client = reqwest::Client::new().unwrap();
+    let client = reqwest::Client::new();
     let mut headers = Headers::new();
     headers.set(Authorization(header));
     let mut res = client
@@ -429,7 +431,7 @@ fn get_access_token(consumer: &Token, request: &Token, pin: &str) -> Token<'stat
             "https://api.twitter.com/oauth/access_token?{}",
             body
         ))
-        .unwrap()
+        // .unwrap()
         .headers(headers)
         .send()
         .unwrap();
@@ -702,6 +704,10 @@ fn main() {
         ARGSW!(list) = v.to_owned();
     }
 
+    if let Some(v) = matches.value_of("media") {
+        ARGSW!(media) = v.to_owned();
+    }
+
     if let Some(v) = matches.value_of("user") {
         ARGSW!(user) = v.to_owned();
     }
@@ -860,6 +866,39 @@ fn main() {
             }
             Err(err) => println!("failed to get tweets: {}", err.description()),
         }
+    } else if ARGSR!(media).len() > 0 {
+        let client = reqwest::Client::new();
+        // let client = reqwest::Client::builder()
+        // .proxy(reqwest::Proxy::http("http://localhost:8888").unwrap()).build().unwrap();
+
+        // TODO: media argument takes multiple values
+        // TODO: multiple values are separated by delimiter
+        // TODO: in that case, value_of method returns iterator
+
+        // println!("{}", ARGSR!(media));
+
+        let mut headers = Headers::new();
+        let (header, _) = oauth::authorization_header(
+            "POST",
+            "https://upload.twitter.com/1.1/media/upload.json",
+            &consumer,
+            Some(&access),
+            None,
+        );
+        headers.set(Authorization(header));
+        let form = reqwest::multipart::Form::new()
+        .file("media", &ARGSR!(media)).unwrap();
+        // println!("{:?}", form);
+        match client
+            .post("https://upload.twitter.com/1.1/media/upload.json")
+            // .unwrap()
+            .multipart(form)
+            .headers(headers)
+            .send()
+        {
+            Ok(mut res) => println!("{:?}", res.text().unwrap()),
+            Err(err) => println!("{}", err.description())
+        }
     } else if ARGSR!(user).len() > 0 {
         param.insert("screen_name".into(), ARGSR!(user).clone().into());
         count_to_param(&mut param);
@@ -893,7 +932,7 @@ fn main() {
             Err(err) => println!("failed to create favorite: {}", err.description()),
         }
     } else if ARGSR!(stream) {
-        let client = reqwest::Client::new().unwrap();
+        let client = reqwest::Client::new();
         let mut headers = Headers::new();
         let (header, _) = oauth::authorization_header(
             "GET",
@@ -905,7 +944,7 @@ fn main() {
         headers.set(Authorization(header));
         let res = client
             .get("https://userstream.twitter.com/1.1/user.json")
-            .unwrap()
+            // .unwrap()
             .headers(headers)
             .send()
             .unwrap();
