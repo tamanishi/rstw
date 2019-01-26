@@ -9,4 +9,5 @@ A Rust clone of [twty](https://github.com/mattn/twty).
 - [x] streaming.
 - [ ] more rust-ish.
 - [ ] remove global variables.
+- [ ] follow original(twty) progress. :)
 
