@@ -2,6 +2,7 @@
 name = "rstw"
 version = "0.2.0"
 authors = ["Masayuki Sunahara <tamanishi@gmail.com>"]
+edition = "2018"
 
 [dependencies]
 clap = {version = "2.31", features = ["yaml"]}
