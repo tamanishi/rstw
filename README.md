@@ -9,7 +9,7 @@ A Rust clone of [twty](https://github.com/mattn/twty).
 
 ## TODOs
 
-- [x] streaming.
+- [x] ~~streaming.~~
 - [x] file upload.
 - [ ] more rust-ish.
 - [ ] remove global variables.
