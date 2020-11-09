@@ -9,8 +9,10 @@ clap = {version = "2.31", features = ["yaml"]}
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
-oauth-client = "0.3"
+# oauth-client = "0.4"
+oauth-client = { git = "https://github.com/tamanishi/oauth-client-rs.git" }
 lazy_static = "1.0"
 colored = "1.5"
 time = "0.1"
-reqwest = "0.8"
+reqwest = { version="0.10", features=["blocking"] }
+mime_guess = "2.0.3"

@@ -29,6 +29,7 @@ args:
         help: "upload media"
         takes_value: true
         multiple: true
+        number_of_values: 1
     - user:
         short: u
         value_name: USER
