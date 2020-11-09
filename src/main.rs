@@ -539,8 +539,8 @@ fn read_config() {
         }
         Err(err) => {
             if err.kind() == ErrorKind::NotFound {
-                credential["consumer_key"] = json!("m0OyCuNE7CkQ3aY7SE5vd8r6F");
-                credential["consumer_secret"] = json!("B2ymwBiqQsYGIWJ9Etq09piBfptMf8ajZVoRL6DVmFtNeMqjq2");
+                credential["consumer_key"] = json!("xxxx");
+                credential["consumer_secret"] = json!("xxxx");
             } else {
                 panic!("failed to open config file. reason: {}", err.to_string())
             }
