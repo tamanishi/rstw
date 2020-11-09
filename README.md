@@ -14,3 +14,5 @@ A Rust clone of [twty](https://github.com/mattn/twty).
 - [ ] more rust-ish.
 - [ ] remove global variables.
 - [ ] Look RSTW_ACCOUNT env val.
+- [ ] async/await
+
