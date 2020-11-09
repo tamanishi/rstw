@@ -8,22 +8,24 @@ extern crate oauth_client as oauth;
 #[macro_use]
 extern crate lazy_static;
 extern crate colored;
-extern crate time;
+extern crate mime_guess;
 extern crate reqwest;
+extern crate time;
 
 use clap::{App, AppSettings};
 use colored::*;
 use oauth::Token;
-use reqwest::header::{Authorization, Headers};
+use reqwest::blocking::multipart::{Form, Part};
+use reqwest::blocking::Client;
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
-use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::io;
-use std::io::{BufReader, ErrorKind};
 use std::io::prelude::*;
+use std::io::{BufReader, ErrorKind};
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
@@ -257,7 +259,7 @@ struct Args {
     fav_id: String,
     inreply_id: String,
     list: String,
-    media: String,
+    media: Vec<String>,
     user: String,
     query: String,
     asjson: bool,
@@ -280,7 +282,7 @@ impl Args {
             fav_id: "".to_owned(),
             inreply_id: "".to_owned(),
             list: "".to_owned(),
-            media: "".to_owned(),
+            media: Vec::new(),
             user: "".to_owned(),
             query: "".to_owned(),
             asjson: false,
@@ -304,42 +306,42 @@ lazy_static! {
 }
 
 macro_rules! ARGSR {
-    ($name: ident) => { ARGS.read().unwrap().$name }
+    ($name: ident) => {
+        ARGS.read().unwrap().$name
+    };
 }
 
 macro_rules! ARGSW {
-    ($name: ident) => { ARGS.write().unwrap().$name }
+    ($name: ident) => {
+        ARGS.write().unwrap().$name
+    };
 }
 
 macro_rules! CONFR {
-    ($name: ident) => { CONF.read().unwrap().$name }
+    ($name: ident) => {
+        CONF.read().unwrap().$name
+    };
 }
 
 macro_rules! CONFW {
-    ($name: ident) => { CONF.write().unwrap().$name }
+    ($name: ident) => {
+        CONF.write().unwrap().$name
+    };
 }
 
 const TIME_FMT: &str = "%a %b %e %T %z %Y";
 
 fn to_local_time(value: &str) -> String {
     match strptime(&value, TIME_FMT) {
-        Ok(tm) => {
-            match strftime(TIME_FMT, &tm.to_local()) {
-                Ok(value) => value,
-                Err(err) => {
-                    println!(
-                        "failed to generate time string. reason: {}",
-                        Error::description(&err)
-                    );
-                    value.to_owned()
-                }
+        Ok(tm) => match strftime(TIME_FMT, &tm.to_local()) {
+            Ok(value) => value,
+            Err(err) => {
+                println!("failed to generate time string. reason: {}", err.to_string());
+                value.to_owned()
             }
-        }
+        },
         Err(err) => {
-            println!(
-                "failed to parse time string. reason: {}",
-                Error::description(&err)
-            );
+            println!("failed to parse time string. reason: {}", err.to_string());
             value.to_owned()
         }
     }
@@ -352,17 +354,10 @@ fn show_tweets(tweets: &Vec<Tweet>, verbose: bool) {
         }
     } else if verbose {
         for tweet in tweets.iter().rev() {
-            println!(
-                "{}: {}",
-                tweet.user.screen_name.red(),
-                tweet.user.name.red()
-            );
+            println!("{}: {}", tweet.user.screen_name.red(), tweet.user.name.red());
             println!(
                 "  {}",
-                tweet.text.replace("\r", "").replace("\n", " ").replace(
-                    "\t",
-                    " ",
-                )
+                tweet.text.replace("\r", "").replace("\n", " ").replace("\t", " ",)
             );
             println!("  {}", tweet.id_str);
             println!("  {}", to_local_time(&tweet.created_at));
@@ -395,15 +390,15 @@ fn get_request_token(consumer: &Token) -> Token<'static> {
         None,
         None,
     );
-    let client = reqwest::Client::new();
-    let mut headers = Headers::new();
-    headers.set(Authorization(header));
+    let client = Client::new();
+    let mut headers = HeaderMap::new();
+    headers.insert(AUTHORIZATION, HeaderValue::from_str(&header).unwrap());
     let mut response = client
-        .get("https://api.twitter.com/oauth/request_token")
-        // .unwrap()
-        .headers(headers)
-        .send()
-        .unwrap();
+            .get("https://api.twitter.com/oauth/request_token")
+            // .unwrap()
+            .headers(headers)
+            .send()
+            .unwrap();
     let mut resp = String::new();
     let _ = response.read_to_string(&mut resp).unwrap();
     let param = split_query(resp.as_ref());
@@ -423,9 +418,9 @@ fn get_access_token(consumer: &Token, request: &Token, pin: &str) -> Token<'stat
         Some(request),
         Some(&params),
     );
-    let client = reqwest::Client::new();
-    let mut headers = Headers::new();
-    headers.set(Authorization(header));
+    let client = Client::new();
+    let mut headers = HeaderMap::new();
+    headers.insert(reqwest::header::AUTHORIZATION, HeaderValue::from_str(&header).unwrap());
     let mut res = client
         .get(&format!(
             "https://api.twitter.com/oauth/access_token?{}",
@@ -445,23 +440,13 @@ fn get_access_token(consumer: &Token, request: &Token, pin: &str) -> Token<'stat
 }
 
 fn get_token() -> bool {
-
     if CONFR!(credential)["access_key"].is_null() {
-        let consumer_key = CONFR!(credential)["consumer_key"]
-            .as_str()
-            .unwrap()
-            .to_string();
-        let consumer_secret = CONFR!(credential)["consumer_secret"]
-            .as_str()
-            .unwrap()
-            .to_string();
+        let consumer_key = CONFR!(credential)["consumer_key"].as_str().unwrap().to_string();
+        let consumer_secret = CONFR!(credential)["consumer_secret"].as_str().unwrap().to_string();
         let consumer = Token::new(consumer_key, consumer_secret);
         let request = get_request_token(&consumer);
 
-        let url = format!(
-            "https://api.twitter.com/oauth/authorize?oauth_token={}",
-            request.key
-        );
+        let url = format!("https://api.twitter.com/oauth/authorize?oauth_token={}", request.key);
 
         let browser: String;
         let args: Vec<String>;
@@ -476,9 +461,10 @@ fn get_token() -> bool {
             args = vec![url.clone()];
         }
 
-        Command::new(browser).args(&args).spawn().expect(
-            "failed to start command",
-        );
+        Command::new(browser)
+            .args(&args)
+            .spawn()
+            .expect("failed to start command");
 
         println!("{}", "Open this URL and enter PIN.".red());
         println!("  {}", url);
@@ -504,36 +490,25 @@ fn read_config() {
     if dir == "" && env::consts::OS == "windows" {
         dir = match env::var("APPDATA") {
             Ok(app_dir) => String::from(Path::new(&app_dir).join("rstw").to_str().unwrap()),
-            Err(_) => {
-                match env::var("USERPROFILE") {
-                    Ok(prof_dir) => String::from(
-                        Path::new(&prof_dir)
-                            .join("Application Data")
-                            .join("rstw")
-                            .to_str()
-                            .unwrap(),
-                    ),
-                    Err(_) => panic!("%USERPROFILE% path not found."),
-                }
-            }
+            Err(_) => match env::var("USERPROFILE") {
+                Ok(prof_dir) => String::from(
+                    Path::new(&prof_dir)
+                        .join("Application Data")
+                        .join("rstw")
+                        .to_str()
+                        .unwrap(),
+                ),
+                Err(_) => panic!("%USERPROFILE% path not found."),
+            },
         };
     } else {
-        dir = String::from(
-            Path::new(&dir)
-                .join(".config")
-                .join("rstw")
-                .to_str()
-                .unwrap(),
-        );
+        dir = String::from(Path::new(&dir).join(".config").join("rstw").to_str().unwrap());
     }
 
     match fs::create_dir_all(&dir) {
         Ok(_) => {}
         Err(err) => {
-            panic!(
-                "could not create config dirctory. reason: {}",
-                Error::description(&err)
-            );
+            panic!("could not create config dirctory. reason: {}", err.to_string());
         }
     };
 
@@ -554,34 +529,20 @@ fn read_config() {
             let mut file_data = String::new();
             match file.read_to_string(&mut file_data) {
                 Ok(_) => {}
-                Err(err) => {
-                    panic!(
-                        "failed to read config file. reason: {}",
-                        Error::description(&err)
-                    )
-                }
+                Err(err) => panic!("failed to read config file. reason: {}", err.to_string()),
             }
 
             credential = match serde_json::from_str(&file_data) {
                 Ok(val) => val,
-                Err(err) => {
-                    panic!(
-                        "failed to parse config file. reason: {}",
-                        Error::description(&err)
-                    )
-                }
+                Err(err) => panic!("failed to parse config file. reason: {}", err.to_string()),
             }
         }
         Err(err) => {
             if err.kind() == ErrorKind::NotFound {
                 credential["consumer_key"] = json!("m0OyCuNE7CkQ3aY7SE5vd8r6F");
-                credential["consumer_secret"] =
-                    json!("B2ymwBiqQsYGIWJ9Etq09piBfptMf8ajZVoRL6DVmFtNeMqjq2");
+                credential["consumer_secret"] = json!("B2ymwBiqQsYGIWJ9Etq09piBfptMf8ajZVoRL6DVmFtNeMqjq2");
             } else {
-                panic!(
-                    "failed to open config file. reason: {}",
-                    Error::description(&err)
-                )
+                panic!("failed to open config file. reason: {}", err.to_string())
             }
         }
     };
@@ -596,25 +557,14 @@ fn read_file(file_path: &str) -> String {
     if file_path == "-" {
         io::stdin().read_line(&mut file_data).unwrap();
     } else {
-
         let mut file = match File::open(file_path) {
             Ok(file) => file,
-            Err(err) => {
-                panic!(
-                    "failed to open the file. reason: {}",
-                    Error::description(&err)
-                )
-            }
+            Err(err) => panic!("failed to open the file. reason: {}", err.to_string()),
         };
 
         match file.read_to_string(&mut file_data) {
             Ok(_) => {}
-            Err(err) => {
-                panic!(
-                    "failed to read the file. reason: {}",
-                    Error::description(&err)
-                )
-            }
+            Err(err) => panic!("failed to read the file. reason: {}", err.to_string()),
         };
     }
     file_data
@@ -623,22 +573,12 @@ fn read_file(file_path: &str) -> String {
 fn save_credential() {
     let mut file = match File::create(&CONFR!(file)) {
         Ok(file) => file,
-        Err(err) => {
-            panic!(
-                "failed to create the file. reason: {}",
-                Error::description(&err)
-            )
-        }
+        Err(err) => panic!("failed to create the file. reason: {}", err.to_string()),
     };
 
     match file.write_all(CONFR!(credential).to_string().as_bytes()) {
         Ok(_) => {}
-        Err(err) => {
-            panic!(
-                "failed to write to the file. reason: {}",
-                Error::description(&err)
-            )
-        }
+        Err(err) => panic!("failed to write to the file. reason: {}", err.to_string()),
     };
 }
 
@@ -656,11 +596,7 @@ fn until_to_param<'a>(param: &mut HashMap<Cow<'a, str>, Cow<'a, str>>) {
     timeformat_to_param(param, "until", &ARGSR!(until));
 }
 
-fn timeformat_to_param<'a>(
-    param: &mut HashMap<Cow<'a, str>, Cow<'a, str>>,
-    name: &str,
-    value: &str,
-) {
+fn timeformat_to_param<'a>(param: &mut HashMap<Cow<'a, str>, Cow<'a, str>>, name: &str, value: &str) {
     if let Ok(_) = strptime(&value, "%Y-%m-%d") {
         param.insert(name.to_string().into(), value.to_string().into());
     }
@@ -680,8 +616,95 @@ fn id_to_param<'a>(param: &mut HashMap<Cow<'a, str>, Cow<'a, str>>, name: &str, 
     }
 }
 
-fn main() {
+fn upload(file_name: &str, access: &Token, consumer: &Token) -> String {
+    if !Path::new(file_name).exists() {
+        panic!("could not read media file.");
+    }
 
+    let mime_type = match mime_guess::from_path(file_name).first_raw() {
+        Some(type_str) => type_str,
+        None => "",
+    };
+
+    // INIT
+    let metadata = fs::metadata(file_name).unwrap();
+    let mut param = HashMap::new();
+    param.insert("command".into(), "INIT".into());
+    param.insert("media_type".into(), mime_type.into());
+    param.insert("total_bytes".into(), metadata.len().to_string().into());
+
+    let client = Client::new();
+    let mut headers = HeaderMap::new();
+    let (header, _) = oauth::authorization_header(
+        "POST",
+        "https://upload.twitter.com/1.1/media/upload.json",
+        &consumer,
+        Some(&access),
+        None,
+    );
+
+    headers.insert(AUTHORIZATION, HeaderValue::from_str(&header).unwrap());
+    match oauth::post(
+        "https://upload.twitter.com/1.1/media/upload.json",
+        &consumer,
+        Some(&access),
+        Some(&param),
+    ) {
+        Ok(bytes) => {
+            let value: serde_json::Value = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+
+            let mut file = File::open(file_name).unwrap();
+            let mut buf: Vec<u8> = Vec::new();
+            file.read_to_end(&mut buf).unwrap();
+
+            // APPEND
+            // TODO: separate 5MB chunk
+            let part = Part::bytes(buf);
+            let media_id_string = value["media_id"].to_string();
+            let form = Form::new()
+                .text("command", "APPEND")
+                .text("media_id", media_id_string.to_string())
+                .part("media", part)
+                .text("segment_index", "0");
+
+            headers.insert(
+                "Content-Type",
+                HeaderValue::from_str(&format!("multipart/form-data; boundary={}", form.boundary())).unwrap(),
+            );
+
+            match client
+                .post("https://upload.twitter.com/1.1/media/upload.json")
+                .headers(headers)
+                .multipart(form)
+                .send()
+            {
+                Ok(_) => {
+                    // FINALIZE
+                    param.clear();
+                    param.insert("command".into(), "FINALIZE".into());
+                    param.insert("media_id".into(), media_id_string.to_string().into());
+                    match oauth::post(
+                        "https://upload.twitter.com/1.1/media/upload.json",
+                        &consumer,
+                        Some(&access),
+                        Some(&param),
+                    ) {
+                        Ok(bytes) => {
+                            let value: serde_json::Value =
+                                serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                            value["media_id"].to_string().into()
+                        }
+                        Err(err) => panic!("failed to FINALIZE: {}", err.to_string()),
+                    }
+                }
+                Err(err) => panic!("filed to APPEND: {}", err.to_string()),
+            }
+        }
+        Err(err) => panic!("failed to INIT: {}", err.to_string()),
+    }
+}
+
+fn main() {
     let yaml = load_yaml!("options.yml");
     let matches = App::from_yaml(yaml)
         .setting(AppSettings::AllowExternalSubcommands)
@@ -704,8 +727,8 @@ fn main() {
         ARGSW!(list) = v.to_owned();
     }
 
-    if let Some(v) = matches.value_of("media") {
-        ARGSW!(media) = v.to_owned();
+    if let Some(v) = matches.values_of("media") {
+        v.for_each(|media| ARGS.write().unwrap().media.push(media.to_owned()));
     }
 
     if let Some(v) = matches.value_of("user") {
@@ -759,29 +782,58 @@ fn main() {
         save_credential();
     }
 
-    let consumer_key = CONFR!(credential)["consumer_key"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let consumer_secret = CONFR!(credential)["consumer_secret"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let consumer_key = CONFR!(credential)["consumer_key"].as_str().unwrap().to_string();
+    let consumer_secret = CONFR!(credential)["consumer_secret"].as_str().unwrap().to_string();
 
     let consumer: Token = Token::new(consumer_key, consumer_secret);
 
-    let access_key = CONFR!(credential)["access_key"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let access_secret = CONFR!(credential)["access_secret"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let access_key = CONFR!(credential)["access_key"].as_str().unwrap().to_string();
+    let access_secret = CONFR!(credential)["access_secret"].as_str().unwrap().to_string();
 
     let access: Token = Token::new(access_key, access_secret);
 
     let mut param = HashMap::new();
+    if ARGSR!(media).len() > 0 {
+        let mut media_ids: Vec<String> = Vec::new();
+        ARGS.read()
+            .unwrap()
+            .media
+            .iter()
+            .for_each(|media| media_ids.push(upload(media, &access, &consumer)));
+
+        // Unknown subcommand may be tweet contents.
+        match matches.subcommand() {
+            (ext_cmd, Some(ext_args)) => {
+                let mut first: Vec<&str> = vec![ext_cmd];
+                let mut second: Vec<&str> = Vec::new();
+                match ext_args.values_of("") {
+                    Some(v) => second = v.collect(),
+                    _ => {}
+                };
+                first.append(&mut second);
+                param.clear();
+                param.insert("status".into(), first.join(" ").into());
+                param.insert("in_reply_to_status_id".into(), ARGSR!(inreply_id).clone().into());
+                param.insert("media_ids".into(), media_ids.join(",").into());
+                match oauth::post(
+                    "https://api.twitter.com/1.1/statuses/update.json",
+                    &consumer,
+                    Some(&access),
+                    Some(&param),
+                ) {
+                    Ok(bytes) => {
+                        let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                        println!("tweeted: {}", tweet.id_str);
+                    }
+                    Err(err) => println!("failed to post tweet: {}", err.to_string()),
+                }
+            }
+            _ => (),
+        }
+
+        return;
+    }
+
     if ARGSR!(query).len() > 0 {
         param.insert("q".into(), ARGSR!(query).clone().into());
         count_to_param(&mut param);
@@ -794,8 +846,7 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let res: serde_json::Value =
-                    serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let res: serde_json::Value = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
                 let val_vec: &Vec<serde_json::Value> = res["statuses"].as_array().unwrap();
                 let tweets: Vec<Tweet> = val_vec
                     .into_iter()
@@ -803,7 +854,7 @@ fn main() {
                     .collect();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
-            Err(err) => println!("failed to get statuses: {}", err.description()),
+            Err(err) => println!("failed to get statuses: {}", err.to_string()),
         }
     } else if ARGSR!(reply) {
         count_to_param(&mut param);
@@ -814,11 +865,10 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap())
-                    .unwrap();
+                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
-            Err(err) => println!("failed to get tweets: {}", err.description()),
+            Err(err) => println!("failed to get tweets: {}", err.to_string()),
         }
     } else if ARGSR!(list).len() > 0 {
         let part_str: String = ARGSR!(list).clone();
@@ -831,8 +881,7 @@ fn main() {
                 None,
             ) {
                 Ok(bytes) => {
-                    let res: serde_json::Value =
-                        serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                    let res: serde_json::Value = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
                     param.insert(
                         "owner_screen_name".into(),
                         res["screen_name"].as_str().unwrap().to_string().into(),
@@ -840,7 +889,7 @@ fn main() {
                     param.insert("slug".into(), part_vec[0].to_string().into());
                 }
                 Err(err) => {
-                    println!("failed to get account: {}", err.description());
+                    println!("failed to get account: {}", err.to_string());
                     return;
                 }
             }
@@ -860,44 +909,10 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap())
-                    .unwrap();
+                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
-            Err(err) => println!("failed to get tweets: {}", err.description()),
-        }
-    } else if ARGSR!(media).len() > 0 {
-        let client = reqwest::Client::new();
-        // let client = reqwest::Client::builder()
-        // .proxy(reqwest::Proxy::http("http://localhost:8888").unwrap()).build().unwrap();
-
-        // TODO: media argument takes multiple values
-        // TODO: multiple values are separated by delimiter
-        // TODO: in that case, value_of method returns iterator
-
-        // println!("{}", ARGSR!(media));
-
-        let mut headers = Headers::new();
-        let (header, _) = oauth::authorization_header(
-            "POST",
-            "https://upload.twitter.com/1.1/media/upload.json",
-            &consumer,
-            Some(&access),
-            None,
-        );
-        headers.set(Authorization(header));
-        let form = reqwest::multipart::Form::new()
-        .file("media", &ARGSR!(media)).unwrap();
-        // println!("{:?}", form);
-        match client
-            .post("https://upload.twitter.com/1.1/media/upload.json")
-            // .unwrap()
-            .multipart(form)
-            .headers(headers)
-            .send()
-        {
-            Ok(mut res) => println!("{:?}", res.text().unwrap()),
-            Err(err) => println!("{}", err.description())
+            Err(err) => println!("failed to get tweets: {}", err.to_string()),
         }
     } else if ARGSR!(user).len() > 0 {
         param.insert("screen_name".into(), ARGSR!(user).clone().into());
@@ -911,11 +926,10 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap())
-                    .unwrap();
+                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
-            Err(err) => println!("failed to get tweets: {}", err.description()),
+            Err(err) => println!("failed to get tweets: {}", err.to_string()),
         }
     } else if ARGSR!(fav_id).len() > 0 {
         param.insert("id".into(), ARGSR!(fav_id).clone().into());
@@ -929,11 +943,11 @@ fn main() {
                 print!("{}", "\u{2764}".red());
                 println!("favorited");
             }
-            Err(err) => println!("failed to create favorite: {}", err.description()),
+            Err(err) => println!("failed to create favorite: {}", err.to_string()),
         }
     } else if ARGSR!(stream) {
-        let client = reqwest::Client::new();
-        let mut headers = Headers::new();
+        let client = Client::new();
+        let mut headers = HeaderMap::new();
         let (header, _) = oauth::authorization_header(
             "GET",
             "https://userstream.twitter.com/1.1/user.json",
@@ -941,7 +955,7 @@ fn main() {
             Some(&access),
             None,
         );
-        headers.set(Authorization(header));
+        headers.insert(AUTHORIZATION, HeaderValue::from_str(&header).unwrap());
         let res = client
             .get("https://userstream.twitter.com/1.1/user.json")
             // .unwrap()
@@ -966,10 +980,7 @@ fn main() {
     } else if ARGSR!(from_file).len() > 0 {
         let text = read_file(&ARGSR!(from_file));
         param.insert("status".into(), text.into());
-        param.insert(
-            "in_reply_to_status_id".into(),
-            ARGSR!(inreply_id).clone().into(),
-        );
+        param.insert("in_reply_to_status_id".into(), ARGSR!(inreply_id).clone().into());
         match oauth::post(
             "https://api.twitter.com/1.1/statuses/update.json",
             &consumer,
@@ -977,11 +988,10 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap())
-                    .unwrap();
+                let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
                 println!("tweeted: {}", tweet.id_str);
             }
-            Err(err) => println!("failed to post tweet: {}", Error::description(&err)),
+            Err(err) => println!("failed to post tweet: {}", err.to_string()),
         }
     } else if env::args().len() == 1 {
         count_to_param(&mut param);
@@ -992,13 +1002,11 @@ fn main() {
             Some(&param),
         ) {
             Ok(bytes) => {
-                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap())
-                    .unwrap();
+                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
-            Err(err) => println!("failed to get tweet: {}", err.description()),
+            Err(err) => println!("failed to get tweet: {}", err.to_string()),
         }
-
     } else {
         // Unknown subcommand may be tweet contents.
         match matches.subcommand() {
@@ -1011,10 +1019,19 @@ fn main() {
                 };
                 first.append(&mut second);
                 param.insert("status".into(), first.join(" ").into());
-                param.insert(
-                    "in_reply_to_status_id".into(),
-                    ARGSR!(inreply_id).clone().into(),
-                );
+                param.insert("in_reply_to_status_id".into(), ARGSR!(inreply_id).clone().into());
+                match oauth::post(
+                    "https://api.twitter.com/1.1/statuses/update.json",
+                    &consumer,
+                    Some(&access),
+                    Some(&param),
+                ) {
+                    Ok(bytes) => {
+                        let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                        println!("tweeted: {}", tweet.id_str);
+                    }
+                    Err(err) => println!("failed to post tweet: {}", err.to_string()),
+                }
             }
             _ => {
                 count_to_param(&mut param);
@@ -1025,28 +1042,12 @@ fn main() {
                     Some(&param),
                 ) {
                     Ok(bytes) => {
-                        let tweets: Vec<Tweet> =
-                            serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                        let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
                         show_tweets(&tweets, ARGSR!(verbose));
                     }
-                    Err(err) => println!("failed to get tweet: {}", err.description()),
+                    Err(err) => println!("failed to get tweet: {}", err.to_string()),
                 }
-                return;
             }
-        }
-
-        match oauth::post(
-            "https://api.twitter.com/1.1/statuses/update.json",
-            &consumer,
-            Some(&access),
-            Some(&param),
-        ) {
-            Ok(bytes) => {
-                let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap())
-                    .unwrap();
-                println!("tweeted: {}", tweet.id_str);
-            }
-            Err(err) => println!("failed to post tweet: {}", Error::description(&err)),
         }
     }
 }
