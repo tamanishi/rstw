@@ -10,7 +10,6 @@ extern crate lazy_static;
 extern crate colored;
 extern crate mime_guess;
 extern crate reqwest;
-extern crate time;
 
 use clap::{App, AppSettings};
 use colored::*;
@@ -31,7 +30,7 @@ use std::process::Command;
 use std::str::FromStr;
 use std::sync::RwLock;
 use std::thread;
-use time::*;
+use chrono::prelude::*;
 
 // Account hold information about account
 #[allow(dead_code)]
@@ -332,13 +331,10 @@ macro_rules! CONFW {
 const TIME_FMT: &str = "%a %b %e %T %z %Y";
 
 fn to_local_time(value: &str) -> String {
-    match strptime(&value, TIME_FMT) {
-        Ok(tm) => match strftime(TIME_FMT, &tm.to_local()) {
-            Ok(value) => value,
-            Err(err) => {
-                println!("failed to generate time string. reason: {}", err.to_string());
-                value.to_owned()
-            }
+    match NaiveDateTime::parse_from_str(&value, TIME_FMT) {
+        Ok(tm) => {
+            let local: DateTime<Local> = Local.from_local_datetime(&tm).unwrap();
+            String::from(local.format(TIME_FMT).to_string())
         },
         Err(err) => {
             println!("failed to parse time string. reason: {}", err.to_string());
@@ -597,7 +593,7 @@ fn until_to_param<'a>(param: &mut HashMap<Cow<'a, str>, Cow<'a, str>>) {
 }
 
 fn timeformat_to_param<'a>(param: &mut HashMap<Cow<'a, str>, Cow<'a, str>>, name: &str, value: &str) {
-    if let Ok(_) = strptime(&value, "%Y-%m-%d") {
+    if let Ok(_) = NaiveDate::parse_from_str(&value, "%Y-%m-%d") {
         param.insert(name.to_string().into(), value.to_string().into());
     }
 }

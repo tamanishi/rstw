@@ -13,6 +13,7 @@ serde_derive = "1.0"
 oauth-client = { git = "https://github.com/tamanishi/oauth-client-rs.git", rev = "aef64354b4688bf934ee4e24ef994c0e21ba9538" }
 lazy_static = "1.0"
 colored = "1.5"
-time = "0.1"
 reqwest = { version="0.10", features=["blocking"] }
 mime_guess = "2.0.3"
+chrono = "0.4"
+
