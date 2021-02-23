@@ -511,12 +511,16 @@ fn read_config() {
     let file_path: String = if ARGSR!(account) == "" {
         String::from(Path::new(&dir).join("settings.json").to_str().unwrap())
     } else {
-        String::from(
+        let path = String::from(
             Path::new(&dir)
-                .join("settings".to_owned() + &ARGSR!(account) + ".json")
+                .join(ARGSR!(account).to_string() + ".json")
                 .to_str()
                 .unwrap(),
-        )
+        );
+        if !Path::new(&path).exists() {
+            panic!("could not find config file {}", path);
+        }
+        path
     };
 
     let mut credential: serde_json::Value = json!(null);
@@ -708,6 +712,10 @@ fn main() {
         .get_matches();
 
     if let Some(v) = matches.value_of("account") {
+        ARGSW!(account) = v.to_owned();
+    }
+
+    if let Ok(v) = env::var("RSTW_ACCOUNT") {
         ARGSW!(account) = v.to_owned();
     }
 
