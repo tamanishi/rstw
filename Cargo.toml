@@ -5,15 +5,15 @@ authors = ["Masayuki Sunahara <tamanishi@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-clap = { version = "2.33.3", features = ["yaml"] }
-serde = "1.0.123"
-serde_json = "1.0.62"
-serde_derive = "1.0.123"
+clap = { version = "3.0.0", features = ["yaml"] }
+serde = "1.0.132"
+serde_json = "1.0.73"
+serde_derive = "1.0.132"
 # oauth-client = "0.4"
 oauth-client = { git = "https://github.com/tamanishi/oauth-client-rs.git", rev = "aef64354b4688bf934ee4e24ef994c0e21ba9538" }
 lazy_static = "1.4.0"
 colored = "2.0.0"
-reqwest = { version="0.11.1", features=["blocking", "multipart"] }
+reqwest = { version = "0.11.8", features = ["blocking", "multipart"] }
 mime_guess = "2.0.3"
 chrono = "0.4.19"
 
