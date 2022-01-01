@@ -11,6 +11,7 @@ extern crate colored;
 extern crate mime_guess;
 extern crate reqwest;
 
+use chrono::prelude::*;
 use clap::{App, AppSettings};
 use colored::*;
 use oauth::Token;
@@ -30,7 +31,6 @@ use std::process::Command;
 use std::str::FromStr;
 use std::sync::RwLock;
 use std::thread;
-use chrono::prelude::*;
 
 // Account hold information about account
 #[allow(dead_code)]
@@ -335,7 +335,7 @@ fn to_local_time(value: &str) -> String {
         Ok(tm) => {
             let local: DateTime<Local> = Local.from_local_datetime(&tm).unwrap();
             String::from(local.format(TIME_FMT).to_string())
-        },
+        }
         Err(err) => {
             println!("failed to parse time string. reason: {}", err.to_string());
             value.to_owned()
@@ -708,7 +708,7 @@ fn main() {
     let yaml = load_yaml!("options.yml");
     let matches = App::from_yaml(yaml)
         .setting(AppSettings::AllowExternalSubcommands)
-        .usage("rstw [FLAGS] [OPTIONS] [TEXT]")
+        .override_usage("rstw [FLAGS] [OPTIONS] [TEXT]")
         .get_matches();
 
     if let Some(v) = matches.value_of("account") {
@@ -807,7 +807,7 @@ fn main() {
 
         // Unknown subcommand may be tweet contents.
         match matches.subcommand() {
-            (ext_cmd, Some(ext_args)) => {
+            Some((ext_cmd, ext_args)) => {
                 let mut first: Vec<&str> = vec![ext_cmd];
                 let mut second: Vec<&str> = Vec::new();
                 match ext_args.values_of("") {
@@ -1014,7 +1014,7 @@ fn main() {
     } else {
         // Unknown subcommand may be tweet contents.
         match matches.subcommand() {
-            (ext_cmd, Some(ext_args)) => {
+            Some((ext_cmd, ext_args)) => {
                 let mut first: Vec<&str> = vec![ext_cmd];
                 let mut second: Vec<&str> = Vec::new();
                 match ext_args.values_of("") {
