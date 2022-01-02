@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate clap;
 #[macro_use]
 extern crate serde_json;
@@ -12,7 +11,7 @@ extern crate mime_guess;
 extern crate reqwest;
 
 use chrono::prelude::*;
-use clap::{App, AppSettings};
+use clap::{AppSettings, Parser};
 use colored::*;
 use oauth::Token;
 use reqwest::blocking::multipart::{Form, Part};
@@ -251,6 +250,78 @@ impl Config {
             credential: json!(null),
         }
     }
+}
+
+#[derive(Parser, Debug)]
+#[clap(about, version, author, override_usage = "rstw [FLAGS] [OPTIONS] [TEXT]")]
+#[clap(setting(AppSettings::AllowExternalSubcommands))]
+struct ArgsForClap {
+    #[clap(
+        short = 'a',
+        long,
+        help = "switch account to load configuration file. Note: experimental"
+    )]
+    account: Option<String>,
+
+    #[clap(short = 'f', long, help = "specify favorite ID")]
+    fav_id: Option<String>,
+
+    #[clap(short = 'i', long, help = "specify in-reply ID, if not specify text, it will be RT.")]
+    inreply_id: Option<String>,
+
+    #[clap(short = 'l', long, help = "show list's timeline (ex: mattn_jp/subtech)")]
+    list: Option<String>,
+
+    #[clap(short = 'm', long, help = "upload media")]
+    media: Option<Vec<String>>,
+
+    #[clap(short = 'u', long, help = "show user's timeline")]
+    user: Option<String>,
+
+    #[clap(short = 's', long, help = "search timeline")]
+    query: Option<String>,
+
+    #[clap(short = 'j', long, help = "as JSON")]
+    asjson: bool,
+
+    #[clap(short = 'S', long, help = "stream timeline")]
+    stream: bool,
+
+    #[clap(short = 'r', long, help = "show replies")]
+    reply: bool,
+
+    #[clap(short = 'F', long, help = "post utf-8 string from a file(\"-\" means STDIN)")]
+    from_file: Option<String>,
+
+    #[clap(short = 'c', long, help = "show NUMBER tweets at timeline.")]
+    count: Option<String>,
+
+    #[clap(long, help = "show tweets created after the DATE (ex. 2017-05-01)")]
+    since: Option<String>,
+
+    #[clap(long, help = "show tweets created before the DATE (ex. 2017-05-31)")]
+    until: Option<String>,
+
+    #[clap(long, help = "show tweets that have ids greater than NUMBER.")]
+    since_id: Option<String>,
+
+    #[clap(long, help = "show tweets that have ids lower than NUMBER.")]
+    max_id: Option<String>,
+
+    #[clap(short = 'v', long, help = "show detail")]
+    verbose: bool,
+
+    #[clap(short = 'd', long, help = "show raw json")]
+    debug: bool,
+
+    #[clap(subcommand)]
+    command: Option<ExtCommand>,
+}
+
+#[derive(Parser, Debug)]
+enum ExtCommand {
+    #[clap(external_subcommand)]
+    Other(Vec<String>),
 }
 
 struct Args {
@@ -705,78 +776,74 @@ fn upload(file_name: &str, access: &Token, consumer: &Token) -> String {
 }
 
 fn main() {
-    let yaml = load_yaml!("options.yml");
-    let matches = App::from_yaml(yaml)
-        .setting(AppSettings::AllowExternalSubcommands)
-        .override_usage("rstw [FLAGS] [OPTIONS] [TEXT]")
-        .get_matches();
+    let arg_clap = ArgsForClap::parse();
 
-    if let Some(v) = matches.value_of("account") {
-        ARGSW!(account) = v.to_owned();
+    if let Some(v) = arg_clap.account {
+        ARGSW!(account) = v;
     }
 
     if let Ok(v) = env::var("RSTW_ACCOUNT") {
         ARGSW!(account) = v.to_owned();
     }
 
-    if let Some(v) = matches.value_of("fav_id") {
-        ARGSW!(fav_id) = v.to_owned();
+    if let Some(v) = arg_clap.fav_id {
+        ARGSW!(fav_id) = v;
     }
 
-    if let Some(v) = matches.value_of("inreply_id") {
-        ARGSW!(inreply_id) = v.to_owned();
+    if let Some(v) = arg_clap.inreply_id {
+        ARGSW!(inreply_id) = v;
     }
 
-    if let Some(v) = matches.value_of("list") {
-        ARGSW!(list) = v.to_owned();
+    if let Some(v) = arg_clap.list {
+        ARGSW!(list) = v;
     }
 
-    if let Some(v) = matches.values_of("media") {
-        v.for_each(|media| ARGS.write().unwrap().media.push(media.to_owned()));
+    if let Some(v) = arg_clap.media {
+        ARGSW!(media) = v;
     }
 
-    if let Some(v) = matches.value_of("user") {
-        ARGSW!(user) = v.to_owned();
+    if let Some(v) = arg_clap.user {
+        ARGSW!(user) = v;
     }
 
-    if let Some(v) = matches.value_of("query") {
-        ARGSW!(query) = v.to_owned();
+    if let Some(v) = arg_clap.query {
+        ARGSW!(query) = v;
     }
 
-    ARGSW!(asjson) = matches.is_present("asjson");
-    ARGSW!(stream) = matches.is_present("stream");
-    ARGSW!(reply) = matches.is_present("reply");
+    ARGSW!(asjson) = arg_clap.asjson;
+    ARGSW!(stream) = arg_clap.stream;
+    ARGSW!(reply) = arg_clap.reply;
 
-    if let Some(v) = matches.value_of("from_file") {
-        ARGSW!(from_file) = v.to_owned();
+    if let Some(v) = arg_clap.from_file {
+        ARGSW!(from_file) = v;
     }
 
-    if let Some(v) = matches.value_of("count") {
-        ARGSW!(count) = v.to_owned();
+    if let Some(v) = arg_clap.count {
+        ARGSW!(count) = v;
     }
 
-    if let Some(v) = matches.value_of("since") {
-        ARGSW!(since) = v.to_owned();
+    if let Some(v) = arg_clap.since {
+        ARGSW!(since) = v;
     }
 
-    if let Some(v) = matches.value_of("until") {
-        ARGSW!(until) = v.to_owned();
+    if let Some(v) = arg_clap.until {
+        ARGSW!(until) = v;
     }
 
-    if let Some(v) = matches.value_of("since_id") {
-        if let Ok(num) = i64::from_str(v) {
+    if let Some(v) = arg_clap.since_id {
+        if let Ok(num) = i64::from_str(&v) {
             ARGSW!(since_id) = num;
         }
     }
 
-    if let Some(v) = matches.value_of("max_id") {
-        if let Ok(num) = i64::from_str(v) {
+    if let Some(v) = arg_clap.max_id {
+        if let Ok(num) = i64::from_str(&v) {
             ARGSW!(max_id) = num;
         }
     }
 
-    ARGSW!(verbose) = matches.is_present("verbose");
-    ARGSW!(debug) = matches.is_present("debug");
+    ARGSW!(verbose) = arg_clap.verbose;
+    ARGSW!(debug) = arg_clap.debug;
 
     read_config();
 
@@ -806,32 +873,27 @@ fn main() {
             .for_each(|media| media_ids.push(upload(media, &access, &consumer)));
 
         // Unknown subcommand may be tweet contents.
-        match matches.subcommand() {
-            Some((ext_cmd, ext_args)) => {
-                let mut first: Vec<&str> = vec![ext_cmd];
-                let mut second: Vec<&str> = Vec::new();
-                match ext_args.values_of("") {
-                    Some(v) => second = v.collect(),
-                    _ => {}
-                };
-                first.append(&mut second);
-                param.clear();
-                param.insert("status".into(), first.join(" ").into());
-                param.insert("in_reply_to_status_id".into(), ARGSR!(inreply_id).clone().into());
-                param.insert("media_ids".into(), media_ids.join(",").into());
-                match oauth::post(
-                    "https://api.twitter.com/1.1/statuses/update.json",
-                    &consumer,
-                    Some(&access),
-                    Some(&param),
-                ) {
-                    Ok(bytes) => {
-                        let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
-                        println!("tweeted: {}", tweet.id_str);
+        match arg_clap.command {
+            Some(ext_cmd) => match ext_cmd {
+                ExtCommand::Other(contents) => {
+                    param.clear();
+                    param.insert("status".into(), contents.join(" ").into());
+                    param.insert("in_reply_to_status_id".into(), ARGSR!(inreply_id).clone().into());
+                    param.insert("media_ids".into(), media_ids.join(",").into());
+                    match oauth::post(
+                        "https://api.twitter.com/1.1/statuses/update.json",
+                        &consumer,
+                        Some(&access),
+                        Some(&param),
+                    ) {
+                        Ok(bytes) => {
+                            let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                            println!("tweeted: {}", tweet.id_str);
+                        }
+                        Err(err) => println!("failed to post tweet: {}", err.to_string()),
                     }
-                    Err(err) => println!("failed to post tweet: {}", err.to_string()),
                 }
-            }
+            },
             _ => (),
         }
 
@@ -1013,30 +1075,25 @@ fn main() {
         }
     } else {
         // Unknown subcommand may be tweet contents.
-        match matches.subcommand() {
-            Some((ext_cmd, ext_args)) => {
-                let mut first: Vec<&str> = vec![ext_cmd];
-                let mut second: Vec<&str> = Vec::new();
-                match ext_args.values_of("") {
-                    Some(v) => second = v.collect(),
-                    _ => {}
-                };
-                first.append(&mut second);
-                param.insert("status".into(), first.join(" ").into());
-                param.insert("in_reply_to_status_id".into(), ARGSR!(inreply_id).clone().into());
-                match oauth::post(
-                    "https://api.twitter.com/1.1/statuses/update.json",
-                    &consumer,
-                    Some(&access),
-                    Some(&param),
-                ) {
-                    Ok(bytes) => {
-                        let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
-                        println!("tweeted: {}", tweet.id_str);
+        match arg_clap.command {
+            Some(ext_cmd) => match ext_cmd {
+                ExtCommand::Other(contents) => {
+                    param.insert("status".into(), contents.join(" ").into());
+                    param.insert("in_reply_to_status_id".into(), ARGSR!(inreply_id).clone().into());
+                    match oauth::post(
+                        "https://api.twitter.com/1.1/statuses/update.json",
+                        &consumer,
+                        Some(&access),
+                        Some(&param),
+                    ) {
+                        Ok(bytes) => {
+                            let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                            println!("tweeted: {}", tweet.id_str);
+                        }
+                        Err(err) => println!("failed to post tweet: {}", err.to_string()),
                     }
-                    Err(err) => println!("failed to post tweet: {}", err.to_string()),
                 }
-            }
+            },
             _ => {
                 count_to_param(&mut param);
                 match oauth::get(
