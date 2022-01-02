@@ -259,26 +259,37 @@ struct ArgsForClap {
     #[clap(
         short = 'a',
         long,
+        value_name = "ACCOUNT",
         help = "switch account to load configuration file. Note: experimental"
     )]
     account: Option<String>,
 
-    #[clap(short = 'f', long, help = "specify favorite ID")]
+    #[clap(short = 'f', long, value_name = "ID", help = "specify favorite ID")]
     fav_id: Option<String>,
 
-    #[clap(short = 'i', long, help = "specify in-reply ID, if not specify text, it will be RT.")]
+    #[clap(
+        short = 'i',
+        long,
+        value_name = "ID",
+        help = "specify in-reply ID, if not specify text, it will be RT."
+    )]
     inreply_id: Option<String>,
 
-    #[clap(short = 'l', long, help = "show list's timeline (ex: mattn_jp/subtech)")]
+    #[clap(
+        short = 'l',
+        long,
+        value_name = "USER/LIST",
+        help = "show list's timeline (ex: mattn_jp/subtech)"
+    )]
     list: Option<String>,
 
-    #[clap(short = 'm', long, help = "upload media")]
+    #[clap(short = 'm', value_name = "FILE", long, help = "upload media")]
     media: Option<Vec<String>>,
 
-    #[clap(short = 'u', long, help = "show user's timeline")]
+    #[clap(short = 'u', value_name = "USER", long, help = "show user's timeline")]
     user: Option<String>,
 
-    #[clap(short = 's', long, help = "search timeline")]
+    #[clap(short = 's', long, value_name = "WORD", help = "search timeline")]
     query: Option<String>,
 
     #[clap(short = 'j', long, help = "as JSON")]
@@ -290,22 +301,35 @@ struct ArgsForClap {
     #[clap(short = 'r', long, help = "show replies")]
     reply: bool,
 
-    #[clap(short = 'F', long, help = "post utf-8 string from a file(\"-\" means STDIN)")]
+    #[clap(
+        short = 'F',
+        long,
+        value_name = "FILENAME",
+        help = "post utf-8 string from a file(\"-\" means STDIN)"
+    )]
     from_file: Option<String>,
 
-    #[clap(short = 'c', long, help = "show NUMBER tweets at timeline.")]
+    #[clap(short = 'c', long, value_name = "NUMBER", help = "show NUMBER tweets at timeline.")]
     count: Option<String>,
 
-    #[clap(long, help = "show tweets created after the DATE (ex. 2017-05-01)")]
+    #[clap(
+        long,
+        value_name = "DATE",
+        help = "show tweets created after the DATE (ex. 2017-05-01)"
+    )]
     since: Option<String>,
 
-    #[clap(long, help = "show tweets created before the DATE (ex. 2017-05-31)")]
+    #[clap(
+        long,
+        value_name = "DATE",
+        help = "show tweets created before the DATE (ex. 2017-05-31)"
+    )]
     until: Option<String>,
 
-    #[clap(long, help = "show tweets that have ids greater than NUMBER.")]
+    #[clap(long, value_name = "NUMBER", help = "show tweets that have ids greater than NUMBER.")]
     since_id: Option<String>,
 
-    #[clap(long, help = "show tweets that have ids lower than NUMBER.")]
+    #[clap(long, value_name = "NUMBER", help = "show tweets that have ids lower than NUMBER.")]
     max_id: Option<String>,
 
     #[clap(short = 'v', long, help = "show detail")]
