@@ -13,6 +13,6 @@ A Rust clone of [twty](https://github.com/mattn/twty).
 - [x] file upload.
 - [ ] more rust-ish.
 - [ ] remove global variables.
-- [ ] Look RSTW_ACCOUNT env val.
+- [x] Look RSTW_ACCOUNT env val.
 - [ ] async/await
 
