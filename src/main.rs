@@ -13,7 +13,7 @@ extern crate reqwest;
 use chrono::prelude::*;
 use clap::{AppSettings, Parser};
 use colored::*;
-use oauth::Token;
+use oauth::{DefaultRequestBuilder, Token};
 use reqwest::blocking::multipart::{Form, Part};
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
@@ -736,14 +736,15 @@ fn upload(file_name: &str, access: &Token, consumer: &Token) -> String {
     );
 
     headers.insert(AUTHORIZATION, HeaderValue::from_str(&header).unwrap());
-    match oauth::post(
+    match oauth::post::<DefaultRequestBuilder>(
         "https://upload.twitter.com/1.1/media/upload.json",
         consumer,
         Some(access),
         Some(&param),
+        &(),
     ) {
         Ok(bytes) => {
-            let value: serde_json::Value = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+            let value: serde_json::Value = serde_json::from_str(&String::from_utf8(bytes.into()).unwrap()).unwrap();
 
             let mut file = File::open(file_name).unwrap();
             let mut buf: Vec<u8> = Vec::new();
@@ -775,15 +776,16 @@ fn upload(file_name: &str, access: &Token, consumer: &Token) -> String {
                     param.clear();
                     param.insert("command".into(), "FINALIZE".into());
                     param.insert("media_id".into(), media_id_string.into());
-                    match oauth::post(
+                    match oauth::post::<DefaultRequestBuilder>(
                         "https://upload.twitter.com/1.1/media/upload.json",
                         consumer,
                         Some(access),
                         Some(&param),
+                        &(),
                     ) {
                         Ok(bytes) => {
                             let value: serde_json::Value =
-                                serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                                serde_json::from_str(&String::from_utf8(bytes.into()).unwrap()).unwrap();
                             value["media_id"].to_string()
                         }
                         Err(err) => panic!("failed to FINALIZE: {}", err),
@@ -899,14 +901,15 @@ fn main() {
                     param.insert("status".into(), contents.join(" ").into());
                     param.insert("in_reply_to_status_id".into(), ARGSR!(inreply_id).clone().into());
                     param.insert("media_ids".into(), media_ids.join(",").into());
-                    match oauth::post(
+                    match oauth::post::<DefaultRequestBuilder>(
                         "https://api.twitter.com/1.1/statuses/update.json",
                         &consumer,
                         Some(&access),
                         Some(&param),
+                        &(),
                     ) {
                         Ok(bytes) => {
-                            let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                            let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes.into()).unwrap()).unwrap();
                             println!("tweeted: {}", tweet.id_str);
                         }
                         Err(err) => println!("failed to post tweet: {}", err),
@@ -923,14 +926,15 @@ fn main() {
         count_to_param(&mut param);
         since_to_param(&mut param);
         until_to_param(&mut param);
-        match oauth::get(
+        match oauth::get::<DefaultRequestBuilder>(
             "https://api.twitter.com/1.1/search/tweets.json",
             &consumer,
             Some(&access),
             Some(&param),
+            &(),
         ) {
             Ok(bytes) => {
-                let res: serde_json::Value = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let res: serde_json::Value = serde_json::from_str(&String::from_utf8(bytes.into()).unwrap()).unwrap();
                 let val_vec: &Vec<serde_json::Value> = res["statuses"].as_array().unwrap();
                 let tweets: Vec<Tweet> = val_vec
                     .iter()
@@ -942,14 +946,15 @@ fn main() {
         }
     } else if ARGSR!(reply) {
         count_to_param(&mut param);
-        match oauth::get(
+        match oauth::get::<DefaultRequestBuilder>(
             "https://api.twitter.com/1.1/statuses/mentions_timeline.json",
             &consumer,
             Some(&access),
             Some(&param),
+            &(),
         ) {
             Ok(bytes) => {
-                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes.into()).unwrap()).unwrap();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
             Err(err) => println!("failed to get tweets: {}", err),
@@ -958,14 +963,16 @@ fn main() {
         let part_str: String = ARGSR!(list).clone();
         let part_vec: Vec<&str> = part_str.splitn(2, '/').collect();
         if part_vec.len() == 1 {
-            match oauth::get(
+            match oauth::get::<DefaultRequestBuilder>(
                 "https://api.twitter.com/1.1/account/settings.json",
                 &consumer,
                 Some(&access),
                 None,
+                &(),
             ) {
                 Ok(bytes) => {
-                    let res: serde_json::Value = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                    let res: serde_json::Value =
+                        serde_json::from_str(&String::from_utf8(bytes.into()).unwrap()).unwrap();
                     param.insert(
                         "owner_screen_name".into(),
                         res["screen_name"].as_str().unwrap().to_string().into(),
@@ -986,14 +993,15 @@ fn main() {
         sinceid_to_param(&mut param);
         maxid_to_param(&mut param);
 
-        match oauth::get(
+        match oauth::get::<DefaultRequestBuilder>(
             "https://api.twitter.com/1.1/lists/statuses.json",
             &consumer,
             Some(&access),
             Some(&param),
+            &(),
         ) {
             Ok(bytes) => {
-                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes.into()).unwrap()).unwrap();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
             Err(err) => println!("failed to get tweets: {}", err),
@@ -1003,25 +1011,27 @@ fn main() {
         count_to_param(&mut param);
         sinceid_to_param(&mut param);
         maxid_to_param(&mut param);
-        match oauth::get(
+        match oauth::get::<DefaultRequestBuilder>(
             "https://api.twitter.com/1.1/statuses/user_timeline.json",
             &consumer,
             Some(&access),
             Some(&param),
+            &(),
         ) {
             Ok(bytes) => {
-                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes.into()).unwrap()).unwrap();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
             Err(err) => println!("failed to get tweets: {}", err),
         }
     } else if !ARGSR!(fav_id).is_empty() {
         param.insert("id".into(), ARGSR!(fav_id).clone().into());
-        match oauth::post(
+        match oauth::post::<DefaultRequestBuilder>(
             "https://api.twitter.com/1.1/favorites/create.json",
             &consumer,
             Some(&access),
             Some(&param),
+            &(),
         ) {
             Ok(_) => {
                 print!("{}", "\u{2764}".red());
@@ -1065,28 +1075,30 @@ fn main() {
         let text = read_file(&ARGSR!(from_file));
         param.insert("status".into(), text.into());
         param.insert("in_reply_to_status_id".into(), ARGSR!(inreply_id).clone().into());
-        match oauth::post(
+        match oauth::post::<DefaultRequestBuilder>(
             "https://api.twitter.com/1.1/statuses/update.json",
             &consumer,
             Some(&access),
             Some(&param),
+            &(),
         ) {
             Ok(bytes) => {
-                let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes.into()).unwrap()).unwrap();
                 println!("tweeted: {}", tweet.id_str);
             }
             Err(err) => println!("failed to post tweet: {}", err),
         }
     } else if env::args().len() == 1 {
         count_to_param(&mut param);
-        match oauth::get(
+        match oauth::get::<DefaultRequestBuilder>(
             "https://api.twitter.com/1.1/statuses/home_timeline.json",
             &consumer,
             Some(&access),
             Some(&param),
+            &(),
         ) {
             Ok(bytes) => {
-                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes.into()).unwrap()).unwrap();
                 show_tweets(&tweets, ARGSR!(verbose));
             }
             Err(err) => println!("failed to get tweet: {}", err),
@@ -1098,14 +1110,15 @@ fn main() {
                 ExtCommand::Other(contents) => {
                     param.insert("status".into(), contents.join(" ").into());
                     param.insert("in_reply_to_status_id".into(), ARGSR!(inreply_id).clone().into());
-                    match oauth::post(
+                    match oauth::post::<DefaultRequestBuilder>(
                         "https://api.twitter.com/1.1/statuses/update.json",
                         &consumer,
                         Some(&access),
                         Some(&param),
+                        &(),
                     ) {
                         Ok(bytes) => {
-                            let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                            let tweet: Tweet = serde_json::from_str(&String::from_utf8(bytes.into()).unwrap()).unwrap();
                             println!("tweeted: {}", tweet.id_str);
                         }
                         Err(err) => println!("failed to post tweet: {}", err),
@@ -1114,14 +1127,16 @@ fn main() {
             },
             _ => {
                 count_to_param(&mut param);
-                match oauth::get(
+                match oauth::get::<DefaultRequestBuilder>(
                     "https://api.twitter.com/1.1/statuses/home_timeline.json",
                     &consumer,
                     Some(&access),
                     Some(&param),
+                    &(),
                 ) {
                     Ok(bytes) => {
-                        let tweets: Vec<Tweet> = serde_json::from_str(&String::from_utf8(bytes).unwrap()).unwrap();
+                        let tweets: Vec<Tweet> =
+                            serde_json::from_str(&String::from_utf8(bytes.into()).unwrap()).unwrap();
                         show_tweets(&tweets, ARGSR!(verbose));
                     }
                     Err(err) => println!("failed to get tweet: {}", err),
